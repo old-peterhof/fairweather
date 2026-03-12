@@ -4,7 +4,7 @@ An ambient weather display for Raspberry Pi. A living, breathing canvas that ref
 
 Built to run 24/7 on a Pi with a vertically-mounted HDMI display and touch input.
 
-![Fair Weather display showing amber tendrils on a sunset sky]()
+![Fair Weather display](assets/fairweather-shot-1.jpg)
 
 ---
 

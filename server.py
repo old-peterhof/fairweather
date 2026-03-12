@@ -166,8 +166,9 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def log_message(self, format, *args):
-        if not any(x in args[0] for x in ["/weather.json", "/geocode", "/restart"]):
-            super().log_message(format, *args)
+        if args and isinstance(args[0], str) and any(x in args[0] for x in ["/weather.json", "/geocode", "/restart"]):
+            return
+        super().log_message(format, *args)
 
 
 if __name__ == "__main__":

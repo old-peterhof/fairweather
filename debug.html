@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Weather Debug</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #0f1115;
+      color: #e6e6eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 520px;
+    }
+
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #2a2d35;
+    }
+
+    td.label {
+      color: #9aa0ad;
+      width: 40%;
+    }
+
+    td.value {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .timestamp {
+      margin-top: 16px;
+      font-size: 12px;
+      color: #7d8291;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Weather Debug</h1>
+
+  <table>
+    <tr><td class="label">Temperature (°F)</td><td class="value" id="temp">—</td></tr>
+    <tr><td class="label">Clouds (%)</td><td class="value" id="clouds">—</td></tr>
+    <tr><td class="label">Sunrise (unix)</td><td class="value" id="sunrise">—</td></tr>
+    <tr><td class="label">Sunset (unix)</td><td class="value" id="sunset">—</td></tr>
+    <tr><td class="label">Wind Speed (mph)</td><td class="value" id="windSpeed">—</td></tr>
+    <tr><td class="label">Wind Gust (mph)</td><td class="value" id="windGust">—</td></tr>
+	<tr><td class="label">Rain (mm/hr)</td><td class="value" id="rain">—</td></tr>
+	<tr><td class="label">Snow (mm/hr)</td><td class="value" id="snow">—</td></tr>
+  </table>
+
+  <div class="timestamp" id="fetchedAt">Last fetch: —</div>
+
+  <script>
+    async function fetchWeather() {
+      try {
+        const res = await fetch('/weather.json');
+        const data = await res.json();
+
+        document.getElementById('temp').textContent =
+          data.temp?.toFixed(1) ?? '—';
+
+        document.getElementById('clouds').textContent =
+          data.clouds ?? '—';
+
+        document.getElementById('sunrise').textContent =
+          data.sunrise ?? '—';
+
+        document.getElementById('sunset').textContent =
+          data.sunset ?? '—';
+
+        document.getElementById('windSpeed').textContent =
+          data.windSpeed?.toFixed(1) ?? '—';
+
+        document.getElementById('windGust').textContent =
+          data.windGust?.toFixed(1) ?? '—';
+
+        document.getElementById('fetchedAt').textContent =
+          `Last fetch: ${data.fetchedAt ?? '—'}`;
+		document.getElementById('rain').textContent =
+   			data.rain?.toFixed(2) ?? '0.00';
+		document.getElementById('snow').textContent =
+  			data.snow?.toFixed(2) ?? '0.00';
+
+
+      } catch (err) {
+        console.warn('Failed to fetch weather.json');
+      }
+    }
+
+    fetchWeather();
+    setInterval(fetchWeather, 5000);
+  </script>
+</body>
+</html>

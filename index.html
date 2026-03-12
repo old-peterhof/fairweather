@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ambient Weather</title>
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; padding: 0;
+      background: black;
+      overflow: hidden;
+      height: 100%; width: 100%;
+    }
+
+    #canvas {
+      display: block;
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── HUD overlay ── */
+    #hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 52px 64px;
+      opacity: 0;
+      transition: opacity 1.8s ease;
+    }
+
+    #hud.ready { opacity: 1; }
+
+    /* top-left: big temp */
+    #temp-block {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    #temp-display {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 200;
+      font-size: clamp(96px, 14vw, 180px);
+      line-height: 0.88;
+      letter-spacing: -0.03em;
+      color: rgba(255,255,255,0.92);
+      text-shadow: 0 2px 40px rgba(0,0,0,0.4);
+    }
+
+    #temp-unit {
+      font-family: 'DM Mono', monospace;
+      font-weight: 300;
+      font-size: clamp(13px, 1.4vw, 18px);
+      letter-spacing: 0.18em;
+      color: rgba(255,255,255,0.45);
+      text-transform: uppercase;
+      margin-top: 10px;
+      margin-left: 4px;
+    }
+
+    /* top-right: time + condition */
+    #top-right {
+      text-align: right;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+    }
+
+    #clock {
+      font-family: 'DM Mono', monospace;
+      font-weight: 300;
+      font-size: clamp(13px, 1.5vw, 19px);
+      letter-spacing: 0.14em;
+      color: rgba(255,255,255,0.5);
+    }
+
+    #condition {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 300;
+      font-size: clamp(22px, 3.2vw, 46px);
+      color: rgba(255,255,255,0.82);
+      text-shadow: 0 2px 24px rgba(0,0,0,0.35);
+      letter-spacing: -0.01em;
+    }
+
+    /* bottom row: stats strip */
+    #stats {
+      display: flex;
+      gap: clamp(28px, 5vw, 72px);
+      align-items: flex-end;
+    }
+
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .stat-label {
+      font-family: 'DM Mono', monospace;
+      font-weight: 300;
+      font-size: clamp(9px, 0.9vw, 12px);
+      letter-spacing: 0.22em;
+      color: rgba(255,255,255,0.35);
+      text-transform: uppercase;
+    }
+
+    .stat-value {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 300;
+      font-size: clamp(22px, 2.8vw, 40px);
+      color: rgba(255,255,255,0.78);
+      line-height: 1;
+      letter-spacing: -0.01em;
+    }
+
+    .stat-unit {
+      font-family: 'DM Mono', monospace;
+      font-weight: 300;
+      font-size: clamp(9px, 0.85vw, 11px);
+      color: rgba(255,255,255,0.28);
+      letter-spacing: 0.14em;
+    }
+
+    /* divider lines */
+    #divider-h {
+      position: fixed;
+      bottom: 0; left: 64px; right: 64px;
+      height: 1px;
+      background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.12) 30%, rgba(255,255,255,0.12) 70%, rgba(255,255,255,0) 100%);
+      bottom: 130px;
+    }
+
+    /* rain/snow badge — only visible when precipitating */
+    #precip-badge {
+      font-family: 'DM Mono', monospace;
+      font-weight: 300;
+      font-size: clamp(9px, 0.9vw, 12px);
+      letter-spacing: 0.22em;
+      color: rgba(180, 220, 255, 0.7);
+      text-transform: uppercase;
+      margin-left: auto; /* push to right in stats row */
+      align-self: flex-end;
+      padding-bottom: 4px;
+      opacity: 0;
+      transition: opacity 1.5s ease;
+    }
+
+    #precip-badge.visible { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="hud">
+  <!-- top row -->
+  <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+    <div id="temp-block">
+      <div id="temp-display">—</div>
+      <div id="temp-unit">Degrees Fahrenheit</div>
+    </div>
+    <div id="top-right">
+      <div id="clock">——:——</div>
+      <div id="condition">—</div>
+    </div>
+  </div>
+
+  <!-- bottom stats -->
+  <div>
+    <div id="divider-h"></div>
+    <div id="stats">
+      <div class="stat">
+        <div class="stat-label">Humidity</div>
+        <div class="stat-value" id="stat-humidity">—</div>
+        <div class="stat-unit">percent</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Wind</div>
+        <div class="stat-value" id="stat-wind">—</div>
+        <div class="stat-unit">mph</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Gusts</div>
+        <div class="stat-value" id="stat-gust">—</div>
+        <div class="stat-unit">mph</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Cloud Cover</div>
+        <div class="stat-value" id="stat-clouds">—</div>
+        <div class="stat-unit">percent</div>
+      </div>
+      <div id="precip-badge" class="stat">
+        <div class="stat-label" id="precip-label">Rain</div>
+        <div class="stat-value" id="precip-value">—</div>
+        <div class="stat-unit">mm / hr</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =============================================
+   Canvas Setup
+============================================= */
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+const RENDER_SCALE = 0.6;
+
+function resize() {
+  canvas.width  = Math.floor(window.innerWidth  * RENDER_SCALE);
+  canvas.height = Math.floor(window.innerHeight * RENDER_SCALE);
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* =============================================
+   Weather State
+============================================= */
+let weather = {
+  temp: 65, clouds: 0,
+  sunrise: 0, sunset: 0,
+  windSpeed: 0, windGust: null,
+  rain: 0, snow: 0,
+  humidity: null,
+  condition: null
+};
+
+let displayedTemp   = weather.temp;
+let displayedClouds = 0;
+let displayedWind   = 0;
+let displayedRain   = 0;
+let gustPulse       = 0;
+
+/* =============================================
+   Gust Event System
+   Fires discrete gusts on a randomized timer,
+   shaped with fast attack / slow decay envelope
+============================================= */
+const gust = {
+  active:    false,
+  intensity: 0,      // 0–1, scaled from windGust mph
+  envelope:  0,      // current envelope value 0–1
+  duration:  0,      // total gust duration in ms
+  elapsed:   0,      // ms since gust started
+  attackFrac: 0.15,  // first 15% = attack
+  nextGustIn: 4000,  // ms until next gust fires
+  timeSinceLast: 0,  // ms accumulator
+};
+
+// Call every frame with delta ms
+function tickGust(deltaMs) {
+  const gustMph = weather.windGust || 0;
+  const windMph = weather.windSpeed || 0;
+
+  // Only fire gusts if gust is meaningfully above sustained wind
+  const gustExcess = Math.max(0, gustMph - windMph);
+
+  gust.timeSinceLast += deltaMs;
+
+  if (!gust.active && gust.timeSinceLast >= gust.nextGustIn && gustExcess > 4) {
+    // Fire a new gust
+    gust.active    = true;
+    gust.elapsed   = 0;
+    gust.intensity = Math.min(gustExcess / 40, 1); // 40mph excess = full intensity
+    gust.duration  = 1200 + Math.random() * 1800;  // 1.2–3s
+    gust.timeSinceLast = 0;
+    // Next gust in 8–22s, shorter gaps at higher wind speeds
+    const baseInterval = lerp(22000, 8000, Math.min(windMph / 40, 1));
+    gust.nextGustIn = baseInterval * (0.6 + Math.random() * 0.8);
+  }
+
+  if (gust.active) {
+    gust.elapsed += deltaMs;
+    const t = Math.min(gust.elapsed / gust.duration, 1);
+    const attack = gust.attackFrac;
+
+    if (t < attack) {
+      // Fast attack: ease-in
+      gust.envelope = (t / attack) * (t / attack);
+    } else {
+      // Slow decay: ease-out
+      const decayT = (t - attack) / (1 - attack);
+      gust.envelope = 1 - decayT * decayT;
+    }
+
+    if (t >= 1) {
+      gust.active   = false;
+      gust.envelope = 0;
+    }
+  } else {
+    gust.envelope = 0;
+  }
+}
+
+let lastFrameTime = performance.now();
+
+/* =============================================
+   Geolocation + Fetch Weather
+============================================= */
+let geoCoords = undefined; // undefined = not yet fetched, null = failed/denied
+
+function getLocation() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      console.warn('Geolocation not supported, using server default');
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      (err) => {
+        console.warn('Geolocation denied or failed, using server default:', err.message);
+        resolve(null);
+      },
+      { timeout: 8000, maximumAge: 5 * 60 * 1000 } // cache position for 5 min
+    );
+  });
+}
+
+async function fetchWeather() {
+  try {
+    // First call: request location. After that reuse cached value (even if null).
+    if (geoCoords === undefined) {
+      geoCoords = await getLocation();
+    }
+
+    const url = geoCoords
+      ? `/weather.json?lat=${geoCoords.lat.toFixed(5)}&lon=${geoCoords.lon.toFixed(5)}`
+      : '/weather.json';
+
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (!data.error) {
+      weather = data;
+      updateHUD();
+    }
+  } catch (e) {
+    console.warn('Weather fetch failed, using cached value');
+  }
+}
+
+fetchWeather();
+setInterval(fetchWeather, 10 * 60 * 1000);
+
+/* =============================================
+   HUD Updates
+============================================= */
+function conditionLabel(data) {
+  // OWM sends a 'condition' string we add in server, else fall back
+  if (data.condition) return data.condition;
+  if (data.snow > 0.1) return 'Snowing';
+  if (data.rain > 0.1) return 'Raining';
+  const c = data.clouds || 0;
+  if (c < 10) return 'Clear';
+  if (c < 30) return 'Mostly Clear';
+  if (c < 60) return 'Partly Cloudy';
+  if (c < 85) return 'Mostly Cloudy';
+  return 'Overcast';
+}
+
+function updateHUD() {
+  const t = weather.temp;
+  document.getElementById('temp-display').textContent =
+    t != null ? Math.round(t) : '—';
+
+  document.getElementById('condition').textContent =
+    conditionLabel(weather);
+
+  const ws = weather.windSpeed;
+  document.getElementById('stat-wind').textContent =
+    ws != null ? Math.round(ws) : '—';
+
+  const wg = weather.windGust;
+  document.getElementById('stat-gust').textContent =
+    wg != null ? Math.round(wg) : '—';
+
+  document.getElementById('stat-clouds').textContent =
+    weather.clouds != null ? weather.clouds : '—';
+
+  const hum = weather.humidity;
+  document.getElementById('stat-humidity').textContent =
+    hum != null ? hum : '—';
+
+  // Precip badge
+  const badge  = document.getElementById('precip-badge');
+  const label  = document.getElementById('precip-label');
+  const val    = document.getElementById('precip-value');
+  const isSnow = (weather.snow || 0) > 0.05;
+  const isRain = (weather.rain || 0) > 0.05;
+
+  if (isSnow) {
+    label.textContent = 'Snow';
+    val.textContent   = weather.snow.toFixed(1);
+    badge.classList.add('visible');
+    badge.style.color = 'rgba(200,230,255,0.7)';
+  } else if (isRain) {
+    label.textContent = 'Rain';
+    val.textContent   = weather.rain.toFixed(1);
+    badge.classList.add('visible');
+    badge.style.color = 'rgba(150,200,255,0.7)';
+  } else {
+    badge.classList.remove('visible');
+  }
+
+  document.getElementById('hud').classList.add('ready');
+}
+
+/* =============================================
+   Clock
+============================================= */
+function updateClock() {
+  const now = new Date();
+  const hh  = String(now.getHours()).padStart(2, '0');
+  const mm  = String(now.getMinutes()).padStart(2, '0');
+  document.getElementById('clock').textContent = `${hh}:${mm}`;
+}
+updateClock();
+setInterval(updateClock, 15000);
+
+/* =============================================
+   Utility
+============================================= */
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function getDayPhase(now, sunrise, sunset) {
+  if (!sunrise || !sunset) return 0.5;
+  const s = now / 1000;
+  // Full 24-hour cycle mapped 0→1
+  // midnight=0, sunrise, noon, sunset, midnight=1
+  const dayLen   = 86400;
+  const midnight = sunrise - (sunset - sunrise); // approximate prior midnight
+  let elapsed    = s - midnight;
+  if (elapsed < 0)    elapsed += dayLen;
+  if (elapsed > dayLen) elapsed -= dayLen;
+  return Math.min(elapsed / dayLen, 1);
+}
+
+function parseColor(c) {
+  if (c.startsWith('#')) {
+    const n = parseInt(c.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const m = c.match(/\d+/g);
+  return m ? m.map(Number) : [0,0,0];
+}
+
+function mixColors(c1, c2, t) {
+  const [r1,g1,b1] = parseColor(c1);
+  const [r2,g2,b2] = parseColor(c2);
+  return `rgb(${Math.round(lerp(r1,r2,t))},${Math.round(lerp(g1,g2,t))},${Math.round(lerp(b1,b2,t))})`;
+}
+
+function adjustColor(rgb, brightness, saturation) {
+  const [r,g,b] = parseColor(rgb);
+  const gray = (r + g + b) / 3;
+  const nr = gray + (r - gray) * saturation;
+  const ng = gray + (g - gray) * saturation;
+  const nb = gray + (b - gray) * saturation;
+  return `rgb(${Math.round(nr*brightness)},${Math.round(ng*brightness)},${Math.round(nb*brightness)})`;
+}
+
+/* =============================================
+   Sky Color — full 24-hr cycle
+============================================= */
+function dayPhaseToColor(phase) {
+  // phase 0→1 = midnight→midnight
+  // stops: 0=midnight, 0.25=sunrise, 0.5=noon, 0.75=sunset, 1=midnight
+  const stops = [
+    [0,    '#0a0620'],  // deep night
+    [0.18, '#160b2e'],  // pre-dawn
+    [0.25, '#f2b04c'],  // sunrise
+    [0.38, '#5ab4e0'],  // morning
+    [0.50, '#2fa4dd'],  // noon
+    [0.65, '#4a9cc4'],  // afternoon
+    [0.75, '#c23b22'],  // sunset
+    [0.85, '#1a0930'],  // dusk
+    [1.0,  '#0a0620'],  // midnight
+  ];
+
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [t0, c0] = stops[i];
+    const [t1, c1] = stops[i + 1];
+    if (phase >= t0 && phase <= t1) {
+      return mixColors(c0, c1, (phase - t0) / (t1 - t0));
+    }
+  }
+  return stops[0][1];
+}
+
+/* =============================================
+   Temperature → Color Mapping
+============================================= */
+function tempToColors(t) {
+  if (t < 32) return ['#081a33', '#2b6f9e', '#9ed3ff'];
+  if (t < 50) return ['#102f4f', '#3c8dbd', '#c6e6f7'];
+  if (t < 65) return ['#1c4f3f', '#6fbf9b', '#e6f2b8'];
+  if (t < 80) return ['#7a3f14', '#d18b3a', '#f7e6b5'];
+  if (t < 95) return ['#8c2d1a', '#e06b4a', '#f4c1a1'];
+  return          ['#5c0f14', '#c63a5a', '#ffd6e8'];
+}
+
+/* =============================================
+   Stars
+============================================= */
+const STAR_COUNT = 220;
+const stars = Array.from({ length: STAR_COUNT }, () => ({
+  x:      Math.random(),
+  y:      Math.random() * 0.72,   // only upper 72% of screen
+  r:      0.4 + Math.random() * 1.3,
+  phase:  Math.random() * Math.PI * 2,
+  speed:  0.3 + Math.random() * 0.7
+}));
+
+/* =============================================
+   Clouds — chunky puffs in top 30%
+   Each cloud is a cluster of overlapping ellipses
+============================================= */
+const CLOUD_COUNT = 9;
+const clouds_data = Array.from({ length: CLOUD_COUNT }, (_, i) => {
+  // Each cloud: position, size, drift speed, and a set of puff offsets
+  const puffCount = 4 + Math.floor(Math.random() * 4);
+  return {
+    x:          Math.random(),                          // 0–1 normalized x
+    y:          0.04 + Math.random() * 0.22,            // top 26% of screen
+    w:          0.18 + Math.random() * 0.22,            // width as fraction of screen
+    h:          0.04 + Math.random() * 0.06,            // height
+    driftSpeed: 0.000018 + Math.random() * 0.000025,    // very slow
+    driftPhase: Math.random() * Math.PI * 2,
+    bobSpeed:   0.0004 + Math.random() * 0.0004,
+    bobPhase:   Math.random() * Math.PI * 2,
+    opacity:    0.55 + Math.random() * 0.35,
+    puffs: Array.from({ length: puffCount }, () => ({
+      dx:  (Math.random() - 0.5),      // relative to cloud center, -0.5–0.5
+      dy:  (Math.random() - 0.5) * 0.6,
+      rx:  0.3 + Math.random() * 0.55, // relative rx (fraction of cloud w)
+      ry:  0.5 + Math.random() * 0.6,  // relative ry (fraction of cloud h)
+    }))
+  };
+});
+
+/* =============================================
+   Fog blobs — wispy irregular shapes across full frame
+============================================= */
+const FOG_BLOB_COUNT = 14;
+const fog_blobs = Array.from({ length: FOG_BLOB_COUNT }, () => ({
+  x:          Math.random(),
+  y:          Math.random(),
+  w:          0.25 + Math.random() * 0.40,
+  h:          0.08 + Math.random() * 0.14,
+  driftSpeed: 0.000008 + Math.random() * 0.000018,
+  driftPhase: Math.random() * Math.PI * 2,
+  bobSpeed:   0.00015 + Math.random() * 0.0002,
+  bobPhase:   Math.random() * Math.PI * 2,
+  opacity:    0.18 + Math.random() * 0.28,
+}));
+
+/* =============================================
+   Tendrils
+============================================= */
+const ARM_COUNT = 24;
+const arms = Array.from({ length: ARM_COUNT }, (_, i) => ({
+  baseAngle:    (i / ARM_COUNT) * Math.PI * 2,
+  angleSpeed:   0.05 + Math.random() * 0.05,
+  lengthSpeed:  0.03 + Math.random() * 0.04,
+  anglePhase:   Math.random() * Math.PI * 2,
+  lengthPhase:  Math.random() * Math.PI * 2,
+  gustSens:     0.5 + Math.random() * 1.0,   // how much tip feels the gust
+}));
+
+// Shared tip-displacement spring — G pushes it, it oscillates back
+// This is lateral screen-space displacement applied near the tip only
+const tipSpring = {
+  offset: 0,   // current lateral displacement (canvas pixels)
+  vel:    0,   // velocity
+};
+
+function windToSway(mph) {
+  return Math.min(Math.max(mph, 0), 60) / 60;
+}
+
+/* =============================================
+   Rain / Snow Particles
+============================================= */
+const MAX_PARTICLES = 160;
+const particles = Array.from({ length: MAX_PARTICLES }, () => ({
+  x: Math.random(), y: Math.random(),
+  vx: 0, vy: 0, active: false, isSnow: false
+}));
+
+function precipIntensity(mm) { return Math.min(mm / 8, 1); }
+
+/* =============================================
+   Animation Loop
+============================================= */
+let time = 0;
+
+function draw() {
+  const now      = performance.now();
+  const deltaMs  = Math.min(now - lastFrameTime, 100); // cap at 100ms
+  lastFrameTime  = now;
+
+  time += 0.003;
+  tickGust(deltaMs);
+
+  // Convenient shorthand used throughout
+  const G = gust.envelope * gust.intensity; // 0–1, peaks during gust event
+
+  /* — smooth values — */
+  displayedTemp   = lerp(displayedTemp,   weather.temp    || 65, 0.0008);
+  displayedClouds = lerp(displayedClouds, weather.clouds  || 0,  0.002);
+  displayedWind   = lerp(displayedWind,   weather.windSpeed || 0, 0.002);
+  displayedRain   = lerp(displayedRain,   Math.max(weather.rain || 0, weather.snow || 0), 0.002);
+
+  const [core, body, baseEdge] = tempToColors(displayedTemp);
+  const cloudCover = Math.min(displayedClouds / 100, 1);
+  const windFactor = windToSway(displayedWind);
+
+  // Sway: sustained wind sets baseline oscillation amplitude
+  const swayAmp = 0.25 + windFactor * 1.2;
+
+  // Tip spring: G pushes laterally, spring restores, damping bleeds energy
+  // Target displacement scales with gust intensity and canvas size
+  const tipTarget = G * canvas.width * 0.055;
+  tipSpring.vel += (tipTarget - tipSpring.offset) * 0.018;
+  tipSpring.vel *= 0.78;  // damping — tune lower for more oscillation
+  tipSpring.offset += tipSpring.vel;
+
+  /* — sky — */
+  const phase    = getDayPhase(Date.now(), weather.sunrise, weather.sunset);
+  const baseSky  = dayPhaseToColor(phase);
+  const skyColor = adjustColor(baseSky, lerp(1.0, 0.55, cloudCover), lerp(1.0, 0.65, cloudCover));
+
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1.0;
+  ctx.filter = 'blur(8px)';
+  ctx.fillStyle = skyColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  /* — radial glow — */
+  const breathe = Math.sin(time) * 0.06;
+  const pulse   = 0.08 * Math.sin(time * 0.8);
+  const driftX  = Math.sin(time * 0.12) * canvas.width * 0.03;
+  const bgCx    = canvas.width / 2 + driftX;
+  const bgCy    = canvas.height * 0.95;
+  const bgR     = canvas.height * (1.05 + pulse);
+  const edge    = mixColors(baseEdge, skyColor, 0.6);
+
+  const bg = ctx.createRadialGradient(bgCx, bgCy, canvas.height * 0.18, bgCx, bgCy, bgR);
+  bg.addColorStop(0.0,  mixColors(core, body, 0.35));
+  bg.addColorStop(0.45, mixColors(body, edge, 0.4));
+  bg.addColorStop(1.0,  skyColor);
+
+  ctx.filter = 'blur(12px)';
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.filter = 'none';
+
+  /* ── STARS ── */
+  const nightness = 1 - Math.sin(Math.max(0, Math.min(1, phase * Math.PI)));
+  const starVis   = Math.pow(nightness, 1.8) * (1 - cloudCover * 0.85);
+
+  if (starVis > 0.01) {
+    ctx.save();
+    ctx.filter = 'none';
+    for (const s of stars) {
+      const twinkle = 0.55 + 0.45 * Math.sin(time * s.speed + s.phase);
+      const alpha   = starVis * twinkle * 0.9;
+      const sx      = s.x * canvas.width;
+      const sy      = s.y * canvas.height;
+      const glow    = ctx.createRadialGradient(sx, sy, 0, sx, sy, s.r * 3.5);
+      glow.addColorStop(0,   `rgba(220,228,255,${alpha})`);
+      glow.addColorStop(0.4, `rgba(200,215,255,${alpha * 0.4})`);
+      glow.addColorStop(1,   'rgba(0,0,0,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(sx, sy, s.r * 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /* ── CLOUDS ── top 30%, density driven by cloud cover % */
+  // cloudVis: 0 = clear sky, 1 = fully overcast
+  const cloudVis = Math.pow(cloudCover, 0.7);
+
+  if (cloudVis > 0.02) {
+    ctx.save();
+    ctx.filter = 'blur(4px)';
+
+    // Cloud color: bright white by day, dark blue-grey at night
+    const dayness = Math.sin(Math.max(0, Math.min(1, phase)) * Math.PI);
+    const cr = Math.round(lerp(80,  245, dayness));
+    const cg = Math.round(lerp(90,  248, dayness));
+    const cb = Math.round(lerp(115, 255, dayness));
+
+    for (let ci = 0; ci < CLOUD_COUNT; ci++) {
+      const cd = clouds_data[ci];
+
+      // Wind drift — gust events give a sharp speed burst
+      const gustDrift = G * 0.012 * (time % 1); // directional nudge during gust
+      const drift = Math.sin(time * cd.driftSpeed * 1000 + cd.driftPhase) * 0.18
+                  + (displayedWind / 60) * time * cd.driftSpeed * 40
+                  + gustDrift;
+      const bob   = Math.sin(time * cd.bobSpeed * 1000 + cd.bobPhase) * 0.008;
+
+      const cx_c  = ((cd.x + drift) % 1.3 - 0.15) * canvas.width;
+      const cy_c  = (cd.y + bob) * canvas.height;
+      const cw    = cd.w * canvas.width;
+      const ch    = cd.h * canvas.height;
+
+      // How many of this cloud's puffs to show scales with cloudVis
+      // First clouds appear at low cover, all 9 visible at full overcast
+      const showFraction = Math.min(1, cloudVis * CLOUD_COUNT / (ci + 1));
+      if (showFraction < 0.05) continue;
+
+      const alpha = cd.opacity * cloudVis * showFraction;
+
+      for (const puff of cd.puffs) {
+        const px = cx_c + puff.dx * cw;
+        const py = cy_c + puff.dy * ch;
+        const rx = puff.rx * cw * 0.5;
+        const ry = puff.ry * ch * 0.9;
+
+        const grad = ctx.createRadialGradient(px, py, 0, px, py, Math.max(rx, ry));
+        grad.addColorStop(0,   `rgba(${cr},${cg},${cb},${alpha})`);
+        grad.addColorStop(0.6, `rgba(${cr},${cg},${cb},${alpha * 0.6})`);
+        grad.addColorStop(1,   `rgba(${cr},${cg},${cb},0)`);
+
+        ctx.save();
+        ctx.scale(1, ry / Math.max(rx, ry));
+        ctx.beginPath();
+        ctx.arc(px, py * (Math.max(rx, ry) / ry), Math.max(rx, ry), 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  /* ── FOG BLOBS ── wispy shapes across entire frame, driven by humidity */
+  const humidity    = weather.humidity || 0;
+  const fogStrength = Math.pow(Math.max(0, (humidity - 35) / 65), 1.4);
+
+  if (fogStrength > 0.01) {
+    ctx.save();
+    ctx.filter = 'blur(6px)';
+
+    // Fog color: cool blue-grey at night, milky white by day
+    const dayness2 = Math.sin(Math.max(0, Math.min(1, phase)) * Math.PI);
+    const fr = Math.round(lerp(130, 215, dayness2));
+    const fg_c = Math.round(lerp(145, 222, dayness2));
+    const fb = Math.round(lerp(175, 228, dayness2));
+
+    for (const blob of fog_blobs) {
+      const drift = Math.sin(time * blob.driftSpeed * 1000 + blob.driftPhase) * 0.12;
+      const bob   = Math.sin(time * blob.bobSpeed   * 1000 + blob.bobPhase)   * 0.025;
+
+      const bx = ((blob.x + drift) % 1.2 - 0.1) * canvas.width;
+      const by = (blob.y + bob) * canvas.height;
+      const bw = blob.w * canvas.width;
+      const bh = blob.h * canvas.height;
+
+      const alpha = blob.opacity * fogStrength;
+
+      // Elongated radial gradient for wispy feel
+      const grad = ctx.createRadialGradient(bx, by, 0, bx, by, bw * 0.5);
+      grad.addColorStop(0,   `rgba(${fr},${fg_c},${fb},${alpha})`);
+      grad.addColorStop(0.5, `rgba(${fr},${fg_c},${fb},${alpha * 0.5})`);
+      grad.addColorStop(1,   `rgba(${fr},${fg_c},${fb},0)`);
+
+      ctx.save();
+      ctx.scale(1, bh / (bw * 0.5));
+      ctx.beginPath();
+      ctx.arc(bx, by * (bw * 0.5 / bh), bw * 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  /* — tendrils — */
+  ctx.save();
+  ctx.filter = 'blur(3px)';
+  ctx.lineCap = 'round';
+
+  const cx         = canvas.width / 2;
+  const cy         = canvas.height * 1.05;
+  const baseRadius = canvas.height * (0.9 + breathe);
+
+  for (const arm of arms) {
+    const wave  = Math.sin(time * arm.angleSpeed + arm.anglePhase) * swayAmp;
+    const angle = arm.baseAngle + wave;
+    const len   = baseRadius * (0.75 + Math.sin(time * arm.lengthSpeed + arm.lengthPhase) * 0.25);
+
+    // Base of arm — fixed, no gust influence here
+    const bx = cx;
+    const by = cy;
+
+    // Natural tip position along the arm direction
+    const tipX = cx + Math.cos(angle) * len;
+    const tipY = cy + Math.sin(angle) * len;
+
+    // Perpendicular to the arm direction — this is the axis we displace along
+    const perpX = -Math.sin(angle);
+    const perpY =  Math.cos(angle);
+
+    // Tip displacement: weighted by gustSens, zero at base, full at tip
+    const tipDisp = tipSpring.offset * arm.gustSens;
+
+    // Apply displacement — more at tip, tapered toward base
+    const ex = tipX + perpX * tipDisp;
+    const ey = tipY + perpY * tipDisp;
+
+    // Control points: c1 near base (little displacement), c2 near tip (more)
+    const c1x = cx + Math.cos(angle) * len * 0.3  + perpX * tipDisp * 0.15;
+    const c1y = cy + Math.sin(angle) * len * 0.3  + perpY * tipDisp * 0.15;
+    const c2x = cx + Math.cos(angle) * len * 0.65 + perpX * tipDisp * 0.6;
+    const c2y = cy + Math.sin(angle) * len * 0.65 + perpY * tipDisp * 0.6;
+
+    const grad = ctx.createLinearGradient(cx, cy, ex, ey);
+    grad.addColorStop(0.0, core);
+    grad.addColorStop(0.6, body);
+    grad.addColorStop(1.0, edge);
+    ctx.strokeStyle = grad;
+
+    const SEG = 80;
+    let px = cx, py = cy;
+    for (let i = 1; i <= SEG; i++) {
+      const t = i / SEG;
+      const mt = 1 - t;
+      const x = mt*mt*mt*cx + 3*mt*mt*t*c1x + 3*mt*t*t*c2x + t*t*t*ex;
+      const y = mt*mt*mt*cy + 3*mt*mt*t*c1y + 3*mt*t*t*c2y + t*t*t*ey;
+      ctx.lineWidth   = canvas.width * 0.14 * Math.pow(mt, 0.9) + 0.8;
+      ctx.globalAlpha = 0.18 * (0.3 + 0.7 * Math.pow(mt, 1.4));
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke();
+      px = x; py = y;
+    }
+  }
+
+  ctx.globalAlpha = 1.0;
+  ctx.restore();
+
+  /* — precipitation — */
+  const rainMM = weather.rain || 0;
+  const snowMM = weather.snow || 0;
+  const rain   = precipIntensity(rainMM);
+  const snow   = precipIntensity(snowMM);
+  const precip = Math.max(rain, snow);
+  const isSnow = snowMM > rainMM;
+
+  if (precip > 0.05) {
+    const target = Math.floor(Math.pow(precip, 0.6) * MAX_PARTICLES * 0.65);
+    let active = particles.filter(p => p.active).length;
+    for (const p of particles) {
+      if (active >= target) break;
+      if (!p.active) {
+        p.active = true;
+        p.isSnow = isSnow;
+        p.x = Math.random() * 1.3 - 0.15;
+        p.y = Math.random() * 1.2 - 0.1;
+        active++;
+      }
+    }
+  } else {
+    for (const p of particles) p.active = false;
+  }
+
+  const windX    = (displayedWind / 60) * 0.002 + G * 0.008; // gusts push rain sideways hard
+  const FALL_SPD = 0.007;
+
+  for (const p of particles) {
+    if (!p.active) continue;
+    if (p.isSnow) {
+      // Gusts scatter snow sideways
+      p.vx = Math.sin(time * 0.8 + p.x * 10) * 0.0008 + G * 0.004;
+      p.vy = FALL_SPD * 0.25 * (1 + snow * 0.4);
+    } else {
+      p.vx = Math.max(-0.012, Math.min(0.012, windX));
+      p.vy = FALL_SPD * (1 + rain * 0.5 + G * 0.4); // gusts slightly speed up fall too
+    }
+    p.x += p.vx;
+    p.y += p.vy;
+    if (p.y > 1.1 || p.x < -0.2 || p.x > 1.2) {
+      p.y = -0.05;
+      p.x = Math.random() * 1.4 - 0.2;
+    }
+  }
+
+  if (precip > 0.05) {
+    ctx.save();
+    ctx.filter = 'none';
+
+    if (isSnow) {
+      // Soft dots for snow
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = 'rgba(230,242,255,0.9)';
+      for (const p of particles) {
+        if (!p.active || !p.isSnow) continue;
+        const x = p.x * canvas.width;
+        const y = p.y * canvas.height;
+        const r = 1.5 + Math.sin(time * 2 + p.x * 20) * 0.5;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      // Streaks angled along velocity — go near-diagonal during gusts
+      const streakLen  = lerp(18, 45, rain);
+      const gustAngle  = G * 2.8; // how far gusts tilt the streaks
+      ctx.globalAlpha  = 1;
+      ctx.strokeStyle  = `rgba(200,225,255,${lerp(0.38, 0.55, G)})`;
+      ctx.lineWidth    = 1;
+      ctx.beginPath();
+      for (const p of particles) {
+        if (!p.active || p.isSnow) continue;
+        const x  = p.x * canvas.width;
+        const y  = p.y * canvas.height;
+        const nx = (p.vx / Math.max(Math.abs(p.vy), 0.0001)) + gustAngle;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - nx * streakLen * 0.5, y - streakLen);
+      }
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  /* — vignette — */
+  const vig = ctx.createRadialGradient(
+    canvas.width/2, canvas.height/2, canvas.height * 0.2,
+    canvas.width/2, canvas.height/2, canvas.height
+  );
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.18)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>

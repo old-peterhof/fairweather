@@ -5,7 +5,7 @@
   <title>Ambient Weather</title>
   <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400&family=DM+Mono:wght@300;400&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
 
   <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -15,6 +15,7 @@
       background: black;
       overflow: hidden;
       height: 100%; width: 100%;
+      user-select: none;
     }
 
     #canvas {
@@ -35,10 +36,10 @@
       justify-content: space-between;
       padding: 52px 64px;
       opacity: 0;
-      transition: opacity 1.8s ease;
+      transition: opacity 0.6s ease;
     }
 
-    #hud.ready { opacity: 1; }
+    #hud.visible { opacity: 1; }
 
     /* top-left: big temp */
     #temp-block {
@@ -99,6 +100,7 @@
       display: flex;
       gap: clamp(28px, 5vw, 72px);
       align-items: flex-end;
+      padding-bottom: 8px;
     }
 
     .stat {
@@ -133,16 +135,16 @@
       letter-spacing: 0.14em;
     }
 
-    /* divider lines */
     #divider-h {
-      position: fixed;
-      bottom: 0; left: 64px; right: 64px;
       height: 1px;
-      background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.12) 30%, rgba(255,255,255,0.12) 70%, rgba(255,255,255,0) 100%);
-      bottom: 130px;
+      margin-bottom: 20px;
+      background: linear-gradient(90deg,
+        rgba(255,255,255,0) 0%,
+        rgba(255,255,255,0.12) 30%,
+        rgba(255,255,255,0.12) 70%,
+        rgba(255,255,255,0) 100%);
     }
 
-    /* rain/snow badge — only visible when precipitating */
     #precip-badge {
       font-family: 'DM Mono', monospace;
       font-weight: 300;
@@ -150,7 +152,7 @@
       letter-spacing: 0.22em;
       color: rgba(180, 220, 255, 0.7);
       text-transform: uppercase;
-      margin-left: auto; /* push to right in stats row */
+      margin-left: auto;
       align-self: flex-end;
       padding-bottom: 4px;
       opacity: 0;
@@ -158,14 +160,326 @@
     }
 
     #precip-badge.visible { opacity: 1; }
+
+    /* ── Settings button ── */
+    #settings-btn {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.6s ease, background 0.2s ease;
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    #settings-btn.visible {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    #settings-btn:hover { background: rgba(255,255,255,0.16); }
+
+    #settings-btn svg {
+      width: 18px; height: 18px;
+      stroke: rgba(255,255,255,0.7);
+      fill: none;
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* ── Settings panel ── */
+    #settings-panel {
+      position: fixed;
+      top: 0; right: 0; bottom: 0;
+      width: clamp(300px, 35vw, 420px);
+      background: rgba(10, 10, 18, 0.82);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-left: 1px solid rgba(255,255,255,0.08);
+      transform: translateX(100%);
+      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 200;
+      overflow-y: auto;
+      padding: 36px 32px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    #settings-panel.open { transform: translateX(0); }
+
+    /* Settings header */
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .settings-title {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 300;
+      font-size: 22px;
+      color: rgba(255,255,255,0.9);
+      letter-spacing: -0.01em;
+    }
+
+    #settings-close {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    #settings-close:hover { background: rgba(255,255,255,0.14); }
+
+    #settings-close svg {
+      width: 14px; height: 14px;
+      stroke: rgba(255,255,255,0.6);
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+
+    /* Section */
+    .settings-section {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .settings-section-label {
+      font-family: 'DM Mono', monospace;
+      font-weight: 300;
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      color: rgba(255,255,255,0.3);
+      text-transform: uppercase;
+      padding-bottom: 4px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    /* Row */
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .settings-row-label {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 300;
+      font-size: 15px;
+      color: rgba(255,255,255,0.7);
+    }
+
+    .settings-row-sub {
+      font-family: 'DM Mono', monospace;
+      font-weight: 300;
+      font-size: 11px;
+      color: rgba(255,255,255,0.3);
+      margin-top: 2px;
+      letter-spacing: 0.05em;
+    }
+
+    /* Toggle */
+    .toggle {
+      position: relative;
+      width: 44px; height: 24px;
+      flex-shrink: 0;
+    }
+
+    .toggle input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.1);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle input:checked + .toggle-track { background: rgba(120,180,255,0.5); }
+
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: white;
+      transition: transform 0.2s;
+    }
+
+    .toggle input:checked + .toggle-track::after { transform: translateX(20px); }
+
+    /* Slider */
+    .settings-slider {
+      width: 100%;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 3px;
+      border-radius: 2px;
+      background: rgba(255,255,255,0.15);
+      outline: none;
+      cursor: pointer;
+    }
+
+    .settings-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.85);
+      cursor: pointer;
+    }
+
+    .slider-row {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .slider-labels {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: rgba(255,255,255,0.3);
+      letter-spacing: 0.08em;
+    }
+
+    #timeout-display {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.08em;
+    }
+
+    /* Theme / font pickers */
+    .option-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    .option-btn {
+      flex: 1;
+      padding: 10px 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.55);
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 300;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+
+    .option-btn.active {
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.3);
+      color: rgba(255,255,255,0.9);
+    }
+
+    .option-btn:hover:not(.active) { background: rgba(255,255,255,0.08); }
+
+    /* Location input */
+    .settings-input {
+      width: 100%;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: rgba(255,255,255,0.8);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .settings-input:focus { border-color: rgba(255,255,255,0.3); }
+    .settings-input::placeholder { color: rgba(255,255,255,0.25); }
+
+    /* Buttons */
+    .settings-btn-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .action-btn {
+      flex: 1;
+      padding: 11px 16px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.7);
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 300;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+      text-align: center;
+    }
+
+    .action-btn:hover { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.95); }
+    .action-btn:active { background: rgba(255,255,255,0.18); }
+
+    .action-btn.danger {
+      border-color: rgba(255,100,100,0.2);
+      color: rgba(255,150,150,0.7);
+    }
+    .action-btn.danger:hover { background: rgba(255,80,80,0.1); color: rgba(255,180,180,0.9); }
+
+    /* Status message */
+    #settings-status {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: rgba(120,200,120,0.7);
+      letter-spacing: 0.08em;
+      min-height: 16px;
+      text-align: center;
+    }
+
+    /* Scrim behind panel */
+    #settings-scrim {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0);
+      z-index: 150;
+      pointer-events: none;
+      transition: background 0.4s ease;
+    }
+
+    #settings-scrim.open {
+      pointer-events: all;
+      background: rgba(0,0,0,0.25);
+    }
   </style>
 </head>
 <body>
 
 <canvas id="canvas"></canvas>
 
+<!-- HUD -->
 <div id="hud">
-  <!-- top row -->
   <div style="display:flex; justify-content:space-between; align-items:flex-start;">
     <div id="temp-block">
       <div id="temp-display">—</div>
@@ -176,8 +490,6 @@
       <div id="condition">—</div>
     </div>
   </div>
-
-  <!-- bottom stats -->
   <div>
     <div id="divider-h"></div>
     <div id="stats">
@@ -210,7 +522,324 @@
   </div>
 </div>
 
+<!-- Settings button -->
+<button id="settings-btn" aria-label="Settings">
+  <svg viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+  </svg>
+</button>
+
+<!-- Scrim -->
+<div id="settings-scrim"></div>
+
+<!-- Settings panel -->
+<div id="settings-panel">
+  <div class="settings-header">
+    <div class="settings-title">Settings</div>
+    <div id="settings-close">
+      <svg viewBox="0 0 14 14"><path d="M1 1l12 12M13 1L1 13"/></svg>
+    </div>
+  </div>
+
+  <!-- Display -->
+  <div class="settings-section">
+    <div class="settings-section-label">Display</div>
+
+    <div class="slider-row">
+      <div class="settings-row">
+        <div class="settings-row-label">Auto-hide after</div>
+        <div id="timeout-display">30 sec</div>
+      </div>
+      <input type="range" class="settings-slider" id="timeout-slider" min="0" max="900" step="5" value="30">
+      <div class="slider-labels"><span>0 sec</span><span>15 min</span></div>
+    </div>
+  </div>
+
+  <!-- Appearance -->
+  <div class="settings-section">
+    <div class="settings-section-label">Appearance</div>
+
+    <div>
+      <div class="settings-row-label" style="margin-bottom:10px;">Color theme</div>
+      <div class="option-group">
+        <button class="option-btn active" data-theme="natural">Natural</button>
+        <button class="option-btn" data-theme="mono">B&W</button>
+        <button class="option-btn" data-theme="ember">Ember</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="settings-row-label" style="margin-bottom:10px;">Font</div>
+      <div class="option-group">
+        <button class="option-btn active" data-font="sans">Sans-serif</button>
+        <button class="option-btn" data-font="serif">Serif</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Location -->
+  <div class="settings-section">
+    <div class="settings-section-label">Location</div>
+
+    <div>
+      <div class="settings-row-label" style="margin-bottom:10px;">Search by city</div>
+      <div style="display:flex; gap:8px;">
+        <input class="settings-input" id="city-input" type="text" placeholder="e.g. Aviemore, Scotland">
+        <button class="action-btn" id="city-search-btn" style="flex:0 0 auto; padding: 11px 18px;">Go</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="settings-row-label" style="margin-bottom:10px;">Manual coordinates</div>
+      <div style="display:flex; gap:8px;">
+        <input class="settings-input" id="lat-input" type="text" placeholder="Lat">
+        <input class="settings-input" id="lon-input" type="text" placeholder="Lon">
+      </div>
+    </div>
+
+    <div class="settings-btn-row">
+      <button class="action-btn" id="use-device-location-btn">Use device location</button>
+      <button class="action-btn" id="apply-coords-btn">Apply</button>
+    </div>
+  </div>
+
+  <!-- System -->
+  <div class="settings-section">
+    <div class="settings-section-label">System</div>
+    <div class="settings-btn-row">
+      <button class="action-btn" id="refresh-weather-btn">Refresh weather</button>
+      <button class="action-btn danger" id="restart-server-btn">Restart server</button>
+    </div>
+  </div>
+
+  <div id="settings-status"></div>
+</div>
+
 <script>
+/* =============================================
+   HUD + Settings State
+============================================= */
+const hudEl          = document.getElementById('hud');
+const settingsBtn    = document.getElementById('settings-btn');
+const settingsPanel  = document.getElementById('settings-panel');
+const settingsClose  = document.getElementById('settings-close');
+const settingsScrim  = document.getElementById('settings-scrim');
+const statusEl       = document.getElementById('settings-status');
+
+// Settings state — persisted to localStorage
+const appSettings = {
+  hudEnabled:   true,
+  timeoutSec:   30,
+  theme:        'natural',
+  font:         'sans',
+  lat:          null,
+  lon:          null,
+};
+
+// Load saved settings
+try {
+  const saved = JSON.parse(localStorage.getItem('wxSettings') || '{}');
+  Object.assign(appSettings, saved);
+} catch(e) {}
+
+function saveSettings() {
+  try { localStorage.setItem('wxSettings', JSON.stringify(appSettings)); } catch(e) {}
+}
+
+// ── HUD visibility ──
+let hudVisible    = false;
+let hudPinned     = false; // true while settings panel is open
+let hideTimer     = null;
+
+function showHUD() {
+  hudVisible = true;
+  hudEl.classList.add('visible');
+  settingsBtn.classList.add('visible');
+  resetHideTimer();
+}
+
+function hideHUD() {
+  if (hudPinned) return;
+  hudVisible = false;
+  hudEl.classList.remove('visible');
+  settingsBtn.classList.remove('visible');
+}
+
+function resetHideTimer() {
+  clearTimeout(hideTimer);
+  if (appSettings.timeoutSec === 0) return; // 0 = stay visible forever
+  hideTimer = setTimeout(hideHUD, appSettings.timeoutSec * 1000);
+}
+
+// Show on load
+showHUD();
+
+// Tap/click anywhere on canvas shows HUD
+document.addEventListener('pointerdown', (e) => {
+  // Don't intercept clicks on settings panel or button
+  if (settingsPanel.contains(e.target) || settingsBtn.contains(e.target)) return;
+  if (hudVisible) {
+    resetHideTimer();
+  } else {
+    showHUD();
+  }
+});
+
+// ── Settings panel ──
+function openSettings() {
+  hudPinned = true;
+  clearTimeout(hideTimer);
+  showHUD();
+  settingsPanel.classList.add('open');
+  settingsScrim.classList.add('open');
+}
+
+function closeSettings() {
+  settingsPanel.classList.remove('open');
+  settingsScrim.classList.remove('open');
+  hudPinned = false;
+  resetHideTimer();
+}
+
+settingsBtn.addEventListener('click', (e) => { e.stopPropagation(); openSettings(); });
+settingsClose.addEventListener('click', closeSettings);
+settingsScrim.addEventListener('click', closeSettings);
+
+// ── Timeout slider ──
+const timeoutSlider  = document.getElementById('timeout-slider');
+const timeoutDisplay = document.getElementById('timeout-display');
+
+function formatTimeout(sec) {
+  if (sec === 0)    return 'Never';
+  if (sec < 60)     return `${sec} sec`;
+  if (sec % 60 === 0) return `${sec/60} min`;
+  return `${Math.floor(sec/60)}m ${sec%60}s`;
+}
+
+timeoutSlider.value = appSettings.timeoutSec;
+timeoutDisplay.textContent = formatTimeout(appSettings.timeoutSec);
+
+timeoutSlider.addEventListener('input', () => {
+  appSettings.timeoutSec = parseInt(timeoutSlider.value);
+  timeoutDisplay.textContent = formatTimeout(appSettings.timeoutSec);
+  saveSettings();
+  resetHideTimer();
+});
+
+// ── Theme picker ──
+document.querySelectorAll('[data-theme]').forEach(btn => {
+  if (btn.dataset.theme === appSettings.theme) btn.classList.add('active');
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-theme]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    appSettings.theme = btn.dataset.theme;
+    saveSettings();
+    applyTheme();
+  });
+});
+
+function applyTheme() {
+  // tempToColors reads appSettings.theme on every call — nothing else needed here
+}
+
+// ── Font picker ──
+document.querySelectorAll('[data-font]').forEach(btn => {
+  if (btn.dataset.font === appSettings.font) btn.classList.add('active');
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-font]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    appSettings.font = btn.dataset.font;
+    saveSettings();
+    applyFont();
+  });
+});
+
+function applyFont() {
+  const display = appSettings.font === 'serif'
+    ? "'Cormorant Garamond', serif"
+    : "'Outfit', sans-serif";
+  document.querySelectorAll('#temp-display, #condition, .stat-value').forEach(el => {
+    el.style.fontFamily = display;
+  });
+}
+
+applyFont();
+
+// ── Location ──
+const cityInput    = document.getElementById('city-input');
+const latInput     = document.getElementById('lat-input');
+const lonInput     = document.getElementById('lon-input');
+
+if (appSettings.lat) latInput.value = appSettings.lat;
+if (appSettings.lon) lonInput.value = appSettings.lon;
+
+function setStatus(msg, isError = false) {
+  statusEl.textContent = msg;
+  statusEl.style.color = isError ? 'rgba(255,120,120,0.8)' : 'rgba(120,200,120,0.8)';
+  setTimeout(() => { statusEl.textContent = ''; }, 4000);
+}
+
+// City search via OWM geocoding
+document.getElementById('city-search-btn').addEventListener('click', async () => {
+  const q = cityInput.value.trim();
+  if (!q) return;
+  setStatus('Searching…');
+  try {
+    const res  = await fetch(`/geocode?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    if (data.error) { setStatus(data.error, true); return; }
+    latInput.value = data.lat.toFixed(5);
+    lonInput.value = data.lon.toFixed(5);
+    setStatus(`Found: ${data.name}`);
+  } catch(e) { setStatus('Search failed', true); }
+});
+
+// Use device location
+document.getElementById('use-device-location-btn').addEventListener('click', () => {
+  if (!navigator.geolocation) { setStatus('Geolocation not supported', true); return; }
+  setStatus('Getting location…');
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      latInput.value = pos.coords.latitude.toFixed(5);
+      lonInput.value = pos.coords.longitude.toFixed(5);
+      setStatus('Location found — press Apply');
+    },
+    () => setStatus('Location denied', true),
+    { timeout: 8000 }
+  );
+});
+
+// Apply manual coords
+document.getElementById('apply-coords-btn').addEventListener('click', () => {
+  const lat = parseFloat(latInput.value);
+  const lon = parseFloat(lonInput.value);
+  if (isNaN(lat) || isNaN(lon)) { setStatus('Invalid coordinates', true); return; }
+  appSettings.lat = lat;
+  appSettings.lon = lon;
+  geoCoords = { lat, lon };
+  saveSettings();
+  fetchWeather();
+  setStatus('Location updated');
+});
+
+// Refresh weather
+document.getElementById('refresh-weather-btn').addEventListener('click', () => {
+  fetchWeather();
+  setStatus('Refreshing…');
+});
+
+// Restart server
+document.getElementById('restart-server-btn').addEventListener('click', async () => {
+  try {
+    await fetch('/restart', { method: 'POST' });
+    setStatus('Server restarting…');
+  } catch(e) { setStatus('Restart signal sent'); }
+});
+
+// Restore saved coords into geoCoords so first fetch uses them
+// (geoCoords is declared later — we set it after JS setup)
+
 /* =============================================
    Canvas Setup
 ============================================= */
@@ -218,9 +847,19 @@ const canvas = document.getElementById('canvas');
 const ctx    = canvas.getContext('2d');
 const RENDER_SCALE = 0.6;
 
+// Offscreen canvases for blur-as-composite on tendrils and clouds
+const tendrilCanvas = document.createElement('canvas');
+const tendrilCtx    = tendrilCanvas.getContext('2d');
+const cloudCanvas   = document.createElement('canvas');
+const cloudCtx      = cloudCanvas.getContext('2d');
+
 function resize() {
   canvas.width  = Math.floor(window.innerWidth  * RENDER_SCALE);
   canvas.height = Math.floor(window.innerHeight * RENDER_SCALE);
+  tendrilCanvas.width  = canvas.width;
+  tendrilCanvas.height = canvas.height;
+  cloudCanvas.width    = canvas.width;
+  cloudCanvas.height   = canvas.height;
 }
 window.addEventListener('resize', resize);
 resize();
@@ -414,7 +1053,12 @@ function updateHUD() {
     badge.classList.remove('visible');
   }
 
-  document.getElementById('hud').classList.add('ready');
+  document.getElementById('hud').classList.add('ready'); // kept for compat
+
+  // If we have saved coords, use them immediately
+  if (appSettings.lat && appSettings.lon) {
+    geoCoords = { lat: appSettings.lat, lon: appSettings.lon };
+  }
 }
 
 /* =============================================
@@ -503,6 +1147,29 @@ function dayPhaseToColor(phase) {
    Temperature → Color Mapping
 ============================================= */
 function tempToColors(t) {
+  const theme = appSettings.theme;
+
+  if (theme === 'mono') {
+    // B&W: desaturated cool greys, brightness shifts subtly with temperature
+    if (t < 32) return ['#0a0a0f', '#2a2a35', '#8888a0'];
+    if (t < 50) return ['#0f0f18', '#303040', '#9090a8'];
+    if (t < 65) return ['#141420', '#383848', '#9898b0'];
+    if (t < 80) return ['#18181e', '#404050', '#a0a0b8'];
+    if (t < 95) return ['#1a1a20', '#484858', '#a8a8c0'];
+    return          ['#1c1c22', '#505060', '#b0b0c8'];
+  }
+
+  if (theme === 'ember') {
+    // Ember: deep reds/oranges/ambers regardless of temperature
+    if (t < 32) return ['#1a0500', '#5c1a00', '#c45000'];
+    if (t < 50) return ['#1f0800', '#6b2200', '#d46010'];
+    if (t < 65) return ['#220a00', '#7a2800', '#e07020'];
+    if (t < 80) return ['#2a0a00', '#8c3000', '#e88030'];
+    if (t < 95) return ['#300800', '#9e3800', '#f09040'];
+    return          ['#380600', '#b04000', '#ffa050'];
+  }
+
+  // Natural (default)
   if (t < 32) return ['#081a33', '#2b6f9e', '#9ed3ff'];
   if (t < 50) return ['#102f4f', '#3c8dbd', '#c6e6f7'];
   if (t < 65) return ['#1c4f3f', '#6fbf9b', '#e6f2b8'];
@@ -576,7 +1243,9 @@ const arms = Array.from({ length: ARM_COUNT }, (_, i) => ({
   lengthSpeed:  0.03 + Math.random() * 0.04,
   anglePhase:   Math.random() * Math.PI * 2,
   lengthPhase:  Math.random() * Math.PI * 2,
-  gustSens:     0.5 + Math.random() * 1.0,   // how much tip feels the gust
+  bendSpeed:    0.018 + Math.random() * 0.025,  // how fast the arm curves
+  bendPhase:    Math.random() * Math.PI * 2,     // independent phase per arm
+  gustSens:     0.5 + Math.random() * 1.0,
 }));
 
 // Shared tip-displacement spring — G pushes it, it oscillates back
@@ -640,7 +1309,13 @@ function draw() {
   /* — sky — */
   const phase    = getDayPhase(Date.now(), weather.sunrise, weather.sunset);
   const baseSky  = dayPhaseToColor(phase);
-  const skyColor = adjustColor(baseSky, lerp(1.0, 0.55, cloudCover), lerp(1.0, 0.65, cloudCover));
+  const skyColor = adjustColor(
+    baseSky,
+    lerp(1.0, 0.55, cloudCover),
+    appSettings.theme === 'mono'  ? lerp(0.0, 0.08, cloudCover) :
+    appSettings.theme === 'ember' ? lerp(0.4, 0.2,  cloudCover) :
+    lerp(1.0, 0.65, cloudCover)
+  );
 
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1.0;
@@ -696,10 +1371,8 @@ function draw() {
   const cloudVis = Math.pow(cloudCover, 0.7);
 
   if (cloudVis > 0.02) {
-    ctx.save();
-    ctx.filter = 'blur(4px)';
+    cloudCtx.clearRect(0, 0, cloudCanvas.width, cloudCanvas.height);
 
-    // Cloud color: bright white by day, dark blue-grey at night
     const dayness = Math.sin(Math.max(0, Math.min(1, phase)) * Math.PI);
     const cr = Math.round(lerp(80,  245, dayness));
     const cg = Math.round(lerp(90,  248, dayness));
@@ -707,21 +1380,17 @@ function draw() {
 
     for (let ci = 0; ci < CLOUD_COUNT; ci++) {
       const cd = clouds_data[ci];
-
-      // Wind drift — gust events give a sharp speed burst
-      const gustDrift = G * 0.012 * (time % 1); // directional nudge during gust
+      const gustDrift = G * 0.012 * (time % 1);
       const drift = Math.sin(time * cd.driftSpeed * 1000 + cd.driftPhase) * 0.18
                   + (displayedWind / 60) * time * cd.driftSpeed * 40
                   + gustDrift;
       const bob   = Math.sin(time * cd.bobSpeed * 1000 + cd.bobPhase) * 0.008;
 
-      const cx_c  = ((cd.x + drift) % 1.3 - 0.15) * canvas.width;
-      const cy_c  = (cd.y + bob) * canvas.height;
-      const cw    = cd.w * canvas.width;
-      const ch    = cd.h * canvas.height;
+      const cx_c  = ((cd.x + drift) % 1.3 - 0.15) * cloudCanvas.width;
+      const cy_c  = (cd.y + bob) * cloudCanvas.height;
+      const cw    = cd.w * cloudCanvas.width;
+      const ch    = cd.h * cloudCanvas.height;
 
-      // How many of this cloud's puffs to show scales with cloudVis
-      // First clouds appear at low cover, all 9 visible at full overcast
       const showFraction = Math.min(1, cloudVis * CLOUD_COUNT / (ci + 1));
       if (showFraction < 0.05) continue;
 
@@ -733,21 +1402,25 @@ function draw() {
         const rx = puff.rx * cw * 0.5;
         const ry = puff.ry * ch * 0.9;
 
-        const grad = ctx.createRadialGradient(px, py, 0, px, py, Math.max(rx, ry));
+        const grad = cloudCtx.createRadialGradient(px, py, 0, px, py, Math.max(rx, ry));
         grad.addColorStop(0,   `rgba(${cr},${cg},${cb},${alpha})`);
         grad.addColorStop(0.6, `rgba(${cr},${cg},${cb},${alpha * 0.6})`);
         grad.addColorStop(1,   `rgba(${cr},${cg},${cb},0)`);
 
-        ctx.save();
-        ctx.scale(1, ry / Math.max(rx, ry));
-        ctx.beginPath();
-        ctx.arc(px, py * (Math.max(rx, ry) / ry), Math.max(rx, ry), 0, Math.PI * 2);
-        ctx.fillStyle = grad;
-        ctx.fill();
-        ctx.restore();
+        cloudCtx.save();
+        cloudCtx.scale(1, ry / Math.max(rx, ry));
+        cloudCtx.beginPath();
+        cloudCtx.arc(px, py * (Math.max(rx, ry) / ry), Math.max(rx, ry), 0, Math.PI * 2);
+        cloudCtx.fillStyle = grad;
+        cloudCtx.fill();
+        cloudCtx.restore();
       }
     }
 
+    // Blit cloud offscreen onto main canvas with blur
+    ctx.save();
+    ctx.filter = 'blur(10px)';
+    ctx.drawImage(cloudCanvas, 0, 0);
     ctx.restore();
   }
 
@@ -794,10 +1467,9 @@ function draw() {
     ctx.restore();
   }
 
-  /* — tendrils — */
-  ctx.save();
-  ctx.filter = 'blur(3px)';
-  ctx.lineCap = 'round';
+  /* — tendrils — drawn onto offscreen canvas, blitted with blur — */
+  tendrilCtx.clearRect(0, 0, tendrilCanvas.width, tendrilCanvas.height);
+  tendrilCtx.lineCap = 'round';
 
   const cx         = canvas.width / 2;
   const cy         = canvas.height * 1.05;
@@ -808,36 +1480,32 @@ function draw() {
     const angle = arm.baseAngle + wave;
     const len   = baseRadius * (0.75 + Math.sin(time * arm.lengthSpeed + arm.lengthPhase) * 0.25);
 
-    // Base of arm — fixed, no gust influence here
-    const bx = cx;
-    const by = cy;
-
-    // Natural tip position along the arm direction
     const tipX = cx + Math.cos(angle) * len;
     const tipY = cy + Math.sin(angle) * len;
-
-    // Perpendicular to the arm direction — this is the axis we displace along
     const perpX = -Math.sin(angle);
     const perpY =  Math.cos(angle);
-
-    // Tip displacement: weighted by gustSens, zero at base, full at tip
     const tipDisp = tipSpring.offset * arm.gustSens;
 
-    // Apply displacement — more at tip, tapered toward base
-    const ex = tipX + perpX * tipDisp;
-    const ey = tipY + perpY * tipDisp;
+    const ex  = tipX + perpX * tipDisp;
+    const ey  = tipY + perpY * tipDisp;
 
-    // Control points: c1 near base (little displacement), c2 near tip (more)
-    const c1x = cx + Math.cos(angle) * len * 0.3  + perpX * tipDisp * 0.15;
-    const c1y = cy + Math.sin(angle) * len * 0.3  + perpY * tipDisp * 0.15;
-    const c2x = cx + Math.cos(angle) * len * 0.65 + perpX * tipDisp * 0.6;
-    const c2y = cy + Math.sin(angle) * len * 0.65 + perpY * tipDisp * 0.6;
+    // Bend: oscillates along each arm's perpendicular, driven by wind + gusts
+    // Low wind = gentle lazy curve, high wind/gusts = pronounced snaking
+    const bendAmp = len * (0.14 + windFactor * 0.28 + G * 0.32);
+    const bend    = Math.sin(time * 0.4 + arm.anglePhase) * bendAmp;
+    const bend2   = Math.sin(time * 0.6 + arm.anglePhase + 1.2) * bendAmp * 0.6;
 
-    const grad = ctx.createLinearGradient(cx, cy, ex, ey);
+    // c1 bends one way, c2 the other — gives an S-curve feel at higher winds
+    const c1x = cx + Math.cos(angle) * len * 0.3  + perpX * (tipDisp * 0.15 + bend);
+    const c1y = cy + Math.sin(angle) * len * 0.3  + perpY * (tipDisp * 0.15 + bend);
+    const c2x = cx + Math.cos(angle) * len * 0.65 + perpX * (tipDisp * 0.6  - bend2);
+    const c2y = cy + Math.sin(angle) * len * 0.65 + perpY * (tipDisp * 0.6  - bend2);
+
+    const grad = tendrilCtx.createLinearGradient(cx, cy, ex, ey);
     grad.addColorStop(0.0, core);
     grad.addColorStop(0.6, body);
     grad.addColorStop(1.0, edge);
-    ctx.strokeStyle = grad;
+    tendrilCtx.strokeStyle = grad;
 
     const SEG = 80;
     let px = cx, py = cy;
@@ -846,14 +1514,18 @@ function draw() {
       const mt = 1 - t;
       const x = mt*mt*mt*cx + 3*mt*mt*t*c1x + 3*mt*t*t*c2x + t*t*t*ex;
       const y = mt*mt*mt*cy + 3*mt*mt*t*c1y + 3*mt*t*t*c2y + t*t*t*ey;
-      ctx.lineWidth   = canvas.width * 0.14 * Math.pow(mt, 0.9) + 0.8;
-      ctx.globalAlpha = 0.18 * (0.3 + 0.7 * Math.pow(mt, 1.4));
-      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke();
+      tendrilCtx.lineWidth   = canvas.width * 0.14 * Math.pow(mt, 0.9) + 0.8;
+      tendrilCtx.globalAlpha = 0.18 * (0.3 + 0.7 * Math.pow(mt, 1.4));
+      tendrilCtx.beginPath(); tendrilCtx.moveTo(px, py); tendrilCtx.lineTo(x, y); tendrilCtx.stroke();
       px = x; py = y;
     }
   }
 
+  // Blit tendril offscreen canvas onto main canvas with blur
+  ctx.save();
+  ctx.filter = 'blur(6px)';
   ctx.globalAlpha = 1.0;
+  ctx.drawImage(tendrilCanvas, 0, 0);
   ctx.restore();
 
   /* — precipitation — */

@@ -66,13 +66,39 @@ Tested on Raspberry Pi OS 64-bit (Debian Trixie), Pi 4B, with labwc as the Wayla
 **1. Copy files to the Pi**
 
 ```bash
-scp index.html server.py weatherman@raspberrypi.local:/home/weatherman/fairweather/
+scp index.html server.py <user>@raspberrypi.local:/home/<user>/fairweather/
 ```
 
 **2. Install the systemd service**
 
+Create the service file:
+
 ```bash
-sudo cp deploy/fairweather.service /etc/systemd/system/
+sudo nano /etc/systemd/system/fairweather.service
+```
+
+Paste the following, replacing `<user>` with your username:
+
+```ini
+[Unit]
+Description=Fair Weather ambient display server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=<user>
+WorkingDirectory=/home/<user>/fairweather
+ExecStart=/usr/bin/python3 /home/<user>/fairweather/server.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then enable and start it:
+
+```bash
 sudo systemctl daemon-reload
 sudo systemctl enable fairweather
 sudo systemctl start fairweather
@@ -83,8 +109,8 @@ sudo systemctl start fairweather
 Create the autostart directory and desktop entry:
 
 ```bash
-mkdir -p /home/weatherman/.config/autostart
-nano /home/weatherman/.config/autostart/fairweather.desktop
+mkdir -p ~/.config/autostart
+nano ~/.config/autostart/fairweather.desktop
 ```
 
 Paste the following:
@@ -119,7 +145,7 @@ journalctl -u fairweather -f
 curl http://localhost:3000/weather.json
 ```
 
-If Chromium loads before the server is ready, increase the startup delay in `fairweather.desktop` by prepending `sleep 5 &&` to the `Exec` line.
+If Chromium loads before the server is ready, increase the startup delay by prepending `sleep 5 &&` to the `Exec` line in `fairweather.desktop`.
 
 ---
 
@@ -135,7 +161,7 @@ Tap anywhere on the display to show the HUD. A gear icon appears in the bottom-r
 | Font | Switch between sans-serif (Outfit) and serif (Cormorant Garamond). |
 | Location | Search by city name, enter coordinates manually, or use device geolocation. |
 | Refresh weather | Force an immediate weather fetch. |
-| Restart server | Restarts the Python server process remotely — useful after config changes. |
+| Restart server | Restarts the Python server process — useful after config changes. |
 
 Settings are saved to `localStorage` and restored on reload.
 
@@ -146,10 +172,8 @@ Settings are saved to `localStorage` and restored on reload.
 ```
 fairweather/
 ├── README.md
-├── index.html          # Frontend — canvas animation + HUD + settings
-├── server.py           # Python HTTP server + OpenWeatherMap integration
-└── deploy/
-    └── fairweather.service   # systemd service unit
+├── index.html       # Frontend — canvas animation + HUD + settings
+└── server.py        # Python HTTP server + OpenWeatherMap integration
 ```
 
 ---

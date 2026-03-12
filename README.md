@@ -1,0 +1,1 @@
+So many of us wonderful nerds have spare raspberry pi or equivalent devices. Why not make use of them? This little guy will (once finished) boot at launch on an rpi and load in your local weather. Super simple! It's just a neat little visualizer to have going on a shelf somewhere.

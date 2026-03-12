@@ -1228,8 +1228,8 @@ const ARM_MAX = 15; // pre-allocate max so we never GC during animation
 function makeArm(i, count) {
   return {
     baseAngle:   (i / count) * Math.PI * 2,
-    angleSpeed:  0.05 + Math.random() * 0.05,
-    lengthSpeed: 0.03 + Math.random() * 0.04,
+    angleSpeed:  0.12 + Math.random() * 0.10,
+    lengthSpeed: 0.07 + Math.random() * 0.08,
     anglePhase:  Math.random() * Math.PI * 2,
     lengthPhase: Math.random() * Math.PI * 2,
     bendPhase:   Math.random() * Math.PI * 2,
@@ -1280,7 +1280,7 @@ function draw(rafTime) {
   const deltaMs = Math.min(now - lastFrameTime, 100);
   lastFrameTime = now;
 
-  time += 0.003 * (deltaMs / 33); // decouple time from frame rate
+  time += 0.006 * (deltaMs / 33); // decouple time from frame rate
   tickGust(deltaMs);
 
   const G = gust.envelope * gust.intensity;
@@ -1293,7 +1293,7 @@ function draw(rafTime) {
   const [core, body, baseEdge] = tempToColors(displayedTemp);
   const cloudCover  = Math.min(displayedClouds / 100, 1);
   const windFactor  = windToSway(displayedWind);
-  const swayAmp     = 0.25 + windFactor * 1.2;
+  const swayAmp     = 0.55 + windFactor * 1.4;
 
   // Tip spring
   const tipTarget  = G * canvas.width * 0.055;
